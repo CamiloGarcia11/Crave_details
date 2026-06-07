@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crave Details | Detalles Hechos a Mano</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300..800&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              serif: ['Playfair Display', 'serif'],
+              sans: ['Plus Jakarta Sans', 'sans-serif'],
+              funny: ['Fredoka', 'sans-serif'], // <-- Tu nueva fuente tierna y llamativa
+            }
+          }
+        }
+      }
+    </script>
+
+    <style>
+      /* Hacemos que los botones, etiquetas y precios usen por defecto la letra tierna */
+      button, .tag-tierno, .precio-tierno {
+        font-family: 'Fredoka', sans-serif !important;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-ButwkNI6.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
