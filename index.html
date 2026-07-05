@@ -19,7 +19,7 @@
             fontFamily: {
               serif: ['Playfair Display', 'serif'],
               sans: ['Plus Jakarta Sans', 'sans-serif'],
-              funny: ['Fredoka', 'sans-serif'], // <- Tu nueva fuente tierna y llamativa
+              funny: ['Fredoka', 'sans-serif'],
             }
           }
         }
@@ -29,5 +29,28 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+      (function() {
+        const tituloOriginal = "Crave Details | Detalles Hechos a Mano";
+        const mensajes = ["¡Vuelve! 💖", "No te vayas aún... 🥺", "Tenemos cositas nuevas ✨"];
+        let intervaloId = null;
+        let indice = 0;
+
+        document.addEventListener("visibilitychange", function() {
+          if (document.hidden) {
+            // El usuario cambió de pestaña: empieza a intercalar mensajes
+            intervaloId = setInterval(function() {
+              document.title = mensajes[indice];
+              indice = (indice + 1) % mensajes.length;
+            }, 2000); // Intercala cada 2 segundos
+          } else {
+            // El usuario regresó: se limpia el efecto y vuelve el título original
+            clearInterval(intervaloId);
+            document.title = tituloOriginal;
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
 import { ShoppingBag, Heart, Trash2, X, MessageCircle, ArrowLeft, CheckCircle, Sparkles, Calendar, Mail, User, DollarSign, FileText, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CustomOrder from './components/CustomOrder'; 
+import AvisoInformativo from "./components/AvisoInformativo";
+import { supabase } from "./lib/supabase";
+import AdminPanel from "./components/AdminPanel"; 
 
 // LISTADO DE LAS 12 SECCIONES / CATEGORÍAS
 const CATEGORIAS = [
@@ -398,6 +401,36 @@ export default function App() {
   const [isChangingTab, setIsChangingTab] = useState(false);
   const [activeCategory, setActiveCategory] = useState(null);
   const [busqueda, setBusqueda] = useState("");
+  const [productos, setProductos] = useState([]);
+  const [esAdminView, setEsAdminView] = useState(false);
+  const [cargando, setCargando] = useState(true);
+
+  // 2. EL EFECTO PARA CONECTAR A SUPABASE
+  useEffect(() => {
+    const obtenerProductos = async () => {
+      try {
+        setCargando(true);
+        const { data, error } = await supabase
+          .from('productos')
+          .select('*');
+
+        if (error) {
+          console.error("Error al cargar productos:", error.message);
+        } else {
+          setProductos(data);
+        }
+      } catch (err) {
+        console.error("Error inesperado:", err);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    obtenerProductos();
+  }, []);
+
+  // 3. LA VALIDACIÓN DE CARGA (Ponlo justo antes del "return (")
+  
 
   // Estados para métodos de pago
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -528,6 +561,9 @@ export default function App() {
     return coincideCategoria && coincideTexto;
   });
 
+  if (esAdminView) {
+    return <AdminPanel productos={productos} setEsAdminView={setEsAdminView} />;
+  }
   return (
     <div className="min-h-screen text-[#2C2C2C] antialiased bg-[#FDFCF0] overflow-x-hidden relative">
       
@@ -582,16 +618,31 @@ export default function App() {
       `}</style>
 
       {/* HEADER / NAVBAR */}
-      <header className="w-full bg-[#FDFCF0] px-6 py-5 md:px-16 border-b border-rose-100/30">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSelectedProduct(null); setActiveCategory(null); cambiarPestana('catalogo'); }}>
-            <span className="text-3xl font-bold tracking-tight text-[#9E1B41]" style={{ color: '#9E1B41', fontFamily: 'Playfair Display, serif' }}>
-              Crave
-            </span>
-            <span className="bg-[#E71B4F] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest">
-              Details
-            </span>
-          </div>
+    <header className="w-full bg-[#FDFCF0] px-6 py-5 md:px-16 border-b border-rose-100/30">
+    <div className="max-w-7xl mx-auto flex justify-between items-center">
+      
+      {/* LOGO CON HUEVO DE PASCUA (3 CLICS ABREN EL ADMIN) */}
+      <div 
+        className="flex items-center gap-2 cursor-pointer select-none" 
+        onClick={(e) => {
+          // Si haces 3 clics rápidos seguidos... ¡Pum! Modo Admin.
+          if (e.detail === 3) {
+            setEsAdminView(true);
+          } else {
+            // Un clic normal sigue haciendo lo que ya tenías configurado
+            setSelectedProduct(null); 
+            setActiveCategory(null); 
+            cambiarPestana('catalogo');
+          }
+        }}
+      >
+        <span className="text-3xl font-bold tracking-tight text-[#9E1B41]" style={{ color: '#9E1B41', fontFamily: 'Playfair Display, serif' }}>
+          Crave
+        </span>
+        <span className="bg-[#E71B4F] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest">
+          Details
+        </span>
+      </div>
 
           <div className="flex items-center gap-3">
             <motion.button 
@@ -1292,6 +1343,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+       <AvisoInformativo />
 
       </div>
     </div>
