@@ -38,56 +38,17 @@ export default function TemplatesSection({ onOrdenarPlantilla }) {
   }, []);
 
   const obtenerPlantillasCombinadas = () => {
-    const finalPlantillas = [];
-    const mergedDbIds = new Set();
-    const mergedDbNombres = new Set();
-
-    // 1. Mocks de plantillas
-    PLANTILLAS_MOCK.forEach((mockItem) => {
-      const dbMatch = plantillas.find(
-        (p) => (p.id === mockItem.id) || (p.nombre === mockItem.name || p.name === mockItem.name)
-      );
-      if (dbMatch) {
-        mergedDbIds.add(dbMatch.id);
-        if (dbMatch.nombre) mergedDbNombres.add(dbMatch.nombre.trim().toLowerCase());
-        if (dbMatch.name) mergedDbNombres.add(dbMatch.name.trim().toLowerCase());
-
-        finalPlantillas.push({
-          ...mockItem,
-          id: dbMatch.id,
-          name: dbMatch.nombre || dbMatch.name || mockItem.name,
-          price: dbMatch.precio !== undefined ? dbMatch.precio : (dbMatch.price !== undefined ? dbMatch.price : mockItem.price),
-          image: dbMatch.imagen || dbMatch.image || mockItem.image,
-          description: dbMatch.description || mockItem.description,
-          format: dbMatch.format || mockItem.format,
-          difficulty: dbMatch.difficulty || mockItem.difficulty
-        });
-      } else {
-        finalPlantillas.push(mockItem);
-      }
+    return plantillas.map((dbItem) => {
+      return {
+        id: dbItem.id,
+        name: dbItem.nombre || dbItem.name || "Plantilla Sin Nombre",
+        price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
+        image: dbItem.imagen || dbItem.image || "https://placehold.co/400x300?text=Crave+Details",
+        description: dbItem.description || "Nueva plantilla digital de Crave Details.",
+        format: dbItem.format || "PDF",
+        difficulty: dbItem.difficulty || "Fácil"
+      };
     });
-
-    // 2. Nuevas plantillas de la base de datos
-    plantillas.forEach((dbItem) => {
-      const dbId = dbItem.id;
-      const dbNombre = (dbItem.nombre || dbItem.name || "").trim().toLowerCase();
-
-      const yaProcesado = mergedDbIds.has(dbId) || mergedDbNombres.has(dbNombre);
-
-      if (!yaProcesado) {
-        finalPlantillas.push({
-          id: dbItem.id,
-          name: dbItem.nombre || dbItem.name,
-          price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
-          image: dbItem.imagen || dbItem.image || "https://placehold.co/400x300?text=Crave+Details",
-          description: dbItem.description || "Nueva plantilla digital de Crave Details.",
-          format: dbItem.format || "PDF",
-          difficulty: dbItem.difficulty || "Fácil"
-        });
-      }
-    });
-
-    return finalPlantillas;
   };
 
   const plantillasCombinadas = obtenerPlantillasCombinadas();

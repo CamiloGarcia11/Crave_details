@@ -20,8 +20,33 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
 
   const [description, setDescription] = useState(""); 
   const [tags, setTags] = useState(""); 
+  const [imagenesList, setImagenesList] = useState([]);
+  const [urlNueva, setUrlNueva] = useState("");
+  const [specsList, setSpecsList] = useState([]);
+  const [specNueva, setSpecNueva] = useState("");
+  const [tipoVariante, setTipoVariante] = useState("ninguno"); // "ninguno", "ramo", "cuadro"
+  const [preciosVariantes, setPreciosVariantes] = useState({}); // object e.g. { Rojo: 25000 }
   const [format, setFormat] = useState("PDF");
   const [difficulty, setDifficulty] = useState("Fácil"); 
+
+
+  const agregarUrlImagen = () => {
+    if (urlNueva.trim()) {
+      setImagenesList(prev => [...prev, urlNueva.trim()]);
+      setUrlNueva("");
+    }
+  };
+
+  const agregarSpec = () => {
+    if (specNueva.trim()) {
+      setSpecsList(prev => [...prev, specNueva.trim()]);
+      setSpecNueva("");
+    }
+  };
+
+  const eliminarSpec = (index) => {
+    setSpecsList(prev => prev.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
     const verificarSesion = async () => {
@@ -99,126 +124,78 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
     setSesion(null);
   };
 
-  // Obtiene la lista combinada para mostrar y editar en el panel administrativo
+  // Obtiene la lista directa de la base de datos sin mocks para evitar publicaciones fijas
   const obtenerItemsCombinados = () => {
     if (pestanaActiva === "productos") {
-      const finalProductos = [];
-      const mergedDbIds = new Set();
-      const mergedDbNombres = new Set();
+      return listaProductos.map((dbItem) => {
+        const imageList = dbItem.imagen ? dbItem.imagen.split(',').map((s) => s.trim()).filter(Boolean) : [];
+        
+        const descRaw = dbItem.descripcion || dbItem.description || "";
+        let parsedDesc = descRaw;
+        let parsedSpecs = [];
+        
+        let variantType = "ninguno";
+        let variantPrices = {};
 
-      // Mocks de la página
-      PRODUCTOS_MOCK.forEach((mockItem) => {
-        const dbMatch = listaProductos.find(
-          (p) => (p.id === mockItem.id) || (p.nombre === mockItem.name || p.name === mockItem.name)
-        );
-        if (dbMatch) {
-          mergedDbIds.add(dbMatch.id);
-          if (dbMatch.nombre) mergedDbNombres.add(dbMatch.nombre.trim().toLowerCase());
-          if (dbMatch.name) mergedDbNombres.add(dbMatch.name.trim().toLowerCase());
-
-          finalProductos.push({
-            ...mockItem,
-            id: dbMatch.id, // Usar el ID de la base de datos
-            nombre: dbMatch.nombre || dbMatch.name || mockItem.name,
-            precio: dbMatch.precio !== undefined ? dbMatch.precio : (dbMatch.price !== undefined ? dbMatch.price : mockItem.price),
-            imagen: dbMatch.imagen || dbMatch.image || mockItem.image,
-            categoria: dbMatch.categoria || dbMatch.category || mockItem.category,
-            cantidad: dbMatch.cantidad || 0,
-            description: dbMatch.descripcion || dbMatch.description || mockItem.description || "",
-            tags: dbMatch.formatos || dbMatch.tags || mockItem.tags || "",
-            existeEnBD: true
+        // Primero separamos por precios de variantes si existen
+        let mainPart = descRaw;
+        if (descRaw.includes("|||prices:")) {
+          const partsForPrices = descRaw.split("|||prices:");
+          mainPart = partsForPrices[0];
+          const pricesStr = partsForPrices[1] || "";
+          
+          // Parsear precios
+          const pairs = pricesStr.split(',').map(s => s.trim()).filter(Boolean);
+          pairs.forEach(pair => {
+            const [k, v] = pair.split('=');
+            if (k && v) {
+              if (k === "tipo") {
+                variantType = v;
+              } else {
+                variantPrices[k] = parseFloat(v) || 0;
+              }
+            }
           });
+        }
+
+        // Luego separamos por specs de la parte principal
+        if (mainPart.includes("|||")) {
+          const parts = mainPart.split("|||");
+          parsedDesc = parts[0].trim();
+          parsedSpecs = (parts[1] || "").split(',').map(s => s.trim()).filter(Boolean);
         } else {
-          finalProductos.push({
-            ...mockItem,
-            nombre: mockItem.name,
-            precio: mockItem.price,
-            imagen: mockItem.image,
-            categoria: mockItem.category,
-            cantidad: 0,
-            existeEnBD: false
-          });
+          parsedDesc = mainPart.trim();
         }
+
+        return {
+          id: dbItem.id,
+          nombre: dbItem.nombre || dbItem.name || "Detalle Sin Nombre",
+          precio: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
+          imagen: dbItem.imagen || dbItem.image || "",
+          categoria: dbItem.categoria || dbItem.category || "Otros",
+          cantidad: dbItem.cantidad || 0,
+          description: parsedDesc,
+          tags: dbItem.formatos || dbItem.tags || "",
+          existeEnBD: true,
+          imagenesList: imageList,
+          specs: parsedSpecs,
+          variantType,
+          variantPrices
+        };
       });
-
-      // Nuevos productos en la BD
-      listaProductos.forEach((dbItem) => {
-        const dbId = dbItem.id;
-        const dbNombre = (dbItem.nombre || dbItem.name || "").trim().toLowerCase();
-
-        const yaProcesado = mergedDbIds.has(dbId) || mergedDbNombres.has(dbNombre);
-
-        if (!yaProcesado) {
-          finalProductos.push({
-            id: dbItem.id,
-            nombre: dbItem.nombre || dbItem.name,
-            precio: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
-            imagen: dbItem.imagen || dbItem.image,
-            categoria: dbItem.categoria || dbItem.category,
-            cantidad: dbItem.cantidad || 0,
-            description: dbItem.descripcion || dbItem.description || "",
-            tags: dbItem.formatos || dbItem.tags || "",
-            existeEnBD: true
-          });
-        }
-      });
-
-      return finalProductos;
     } else {
-      // Para plantillas
-      const finalPlantillas = [];
-      const mergedDbIds = new Set();
-      const mergedDbNombres = new Set();
-
-      PLANTILLAS_MOCK.forEach((mockItem) => {
-        const dbMatch = listaPlantillas.find(
-          (p) => (p.id === mockItem.id) || (p.nombre === mockItem.name || p.name === mockItem.name)
-        );
-        if (dbMatch) {
-          mergedDbIds.add(dbMatch.id);
-          if (dbMatch.nombre) mergedDbNombres.add(dbMatch.nombre.trim().toLowerCase());
-          if (dbMatch.name) mergedDbNombres.add(dbMatch.name.trim().toLowerCase());
-
-          finalPlantillas.push({
-            ...mockItem,
-            id: dbMatch.id,
-            name: dbMatch.nombre || dbMatch.name || mockItem.name,
-            price: dbMatch.precio !== undefined ? dbMatch.precio : (dbMatch.price !== undefined ? dbMatch.price : mockItem.price),
-            image: dbMatch.imagen || dbMatch.image || mockItem.image,
-            description: dbMatch.description || mockItem.description,
-            format: dbMatch.format || mockItem.format,
-            difficulty: dbMatch.difficulty || mockItem.difficulty,
-            existeEnBD: true
-          });
-        } else {
-          finalPlantillas.push({
-            ...mockItem,
-            existeEnBD: false
-          });
-        }
+      return listaPlantillas.map((dbItem) => {
+        return {
+          id: dbItem.id,
+          name: dbItem.nombre || dbItem.name || "Plantilla Sin Nombre",
+          price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
+          image: dbItem.imagen || dbItem.image || "",
+          description: dbItem.description || "",
+          format: dbItem.format || "PDF",
+          difficulty: dbItem.difficulty || "Fácil",
+          existeEnBD: true
+        };
       });
-
-      listaPlantillas.forEach((dbItem) => {
-        const dbId = dbItem.id;
-        const dbNombre = (dbItem.nombre || dbItem.name || "").trim().toLowerCase();
-
-        const yaProcesado = mergedDbIds.has(dbId) || mergedDbNombres.has(dbNombre);
-
-        if (!yaProcesado) {
-          finalPlantillas.push({
-            id: dbItem.id,
-            name: dbItem.nombre || dbItem.name,
-            price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
-            image: dbItem.imagen || dbItem.image,
-            description: dbItem.description || "Nueva plantilla.",
-            format: dbItem.format || "PDF",
-            difficulty: dbItem.difficulty || "Fácil",
-            existeEnBD: true
-          });
-        }
-      });
-
-      return finalPlantillas;
     }
   };
 
@@ -228,13 +205,26 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
     e.preventDefault();
     try {
       if (pestanaActiva === "productos") {
+        // Serializar las especificaciones y precios de variantes al final del campo de descripción
+        let descriptionWithSpecs = specsList.length > 0 
+          ? `${description.trim()}|||${specsList.join(',')}`
+          : description.trim();
+
+        if (tipoVariante !== "ninguno") {
+          const pricesStr = Object.entries(preciosVariantes)
+            .filter(([_, v]) => v !== undefined && v !== "")
+            .map(([k, v]) => `${k}=${v}`)
+            .join(',');
+          descriptionWithSpecs += `|||prices:tipo=${tipoVariante},${pricesStr}`;
+        }
+
         const payloadProd = { 
           nombre: nombreGenerico, 
           precio: parseFloat(precioGenerico) || 0, 
-          imagen: imagenGenerica, 
+          imagen: imagenesList.join(','), 
           categoria, 
           cantidad: parseInt(cantidad) || 0,
-          descripcion: description,
+          descripcion: descriptionWithSpecs,
           formatos: tags
         };
         const existeEnBD = editandoId && listaProductos.some(p => p.id === editandoId);
@@ -283,6 +273,37 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
       setCantidad(item.cantidad || "0");
       setDescription(item.description || item.descripcion || "");
       setTags(item.tags || item.formatos || "");
+      setImagenesList(item.imagenesList || (item.imagen ? item.imagen.split(',').map(s => s.trim()).filter(Boolean) : []));
+      setSpecsList(item.specs && item.specs.length > 0 ? item.specs : ["Detalle hecho a mano", "Diseño personalizado"]);
+
+      // Auto-detección y pre-población de tipo y precios de variantes para productos existentes
+      let detectedType = item.variantType || "ninguno";
+      let prices = item.variantPrices || {};
+
+      if (detectedType === "ninguno") {
+        const catLower = (item.categoria || "").toLowerCase();
+        const nameLower = (item.nombre || item.name || "").toLowerCase();
+        const esRamo = catLower.includes("ramo") || nameLower.includes("ramo");
+        const esCuadro = catLower.includes("portaretrato") || catLower.includes("cuadro") || catLower.includes("calendario") ||
+                         nameLower.includes("portaretrato") || nameLower.includes("cuadro") || nameLower.includes("calendario");
+
+        if (esRamo) {
+          detectedType = "ramo";
+          prices = {};
+          ["Rojo", "Rosado", "Azul", "Morado", "Amarillo", "Blanco"].forEach(c => {
+            prices[c] = item.precio || 0;
+          });
+        } else if (esCuadro) {
+          detectedType = "cuadro";
+          prices = {};
+          ["10x15", "13x18", "15x20", "20x30"].forEach(s => {
+            prices[s] = item.precio || 0;
+          });
+        }
+      }
+
+      setTipoVariante(detectedType);
+      setPreciosVariantes(prices);
     } else {
       setNombreGenerico(item.name || "");
       setPrecioGenerico(item.price || "");
@@ -291,6 +312,10 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
       setFormat(item.format || "PDF");
       setDifficulty(item.difficulty || "Fácil");
       setTags("");
+      setImagenesList([]);
+      setSpecsList([]);
+      setTipoVariante("ninguno");
+      setPreciosVariantes({});
     }
   };
 
@@ -305,6 +330,12 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
     setFormat("PDF");
     setDifficulty("Fácil");
     setTags("");
+    setImagenesList([]);
+    setUrlNueva("");
+    setSpecsList([]);
+    setSpecNueva("");
+    setTipoVariante("ninguno");
+    setPreciosVariantes({});
   };
 
   const handleFileChange = async (e) => {
@@ -346,7 +377,12 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
           } else {
             // Caso exitoso en bucket 'productos'
             const { data } = supabase.storage.from('productos').getPublicUrl(filePath);
-            setImagenGenerica(data.publicUrl);
+            const publicUrl = data.publicUrl;
+            if (pestanaActiva === "productos") {
+              setImagenesList(prev => [...prev, publicUrl]);
+            } else {
+              setImagenGenerica(publicUrl);
+            }
             alert("¡Imagen subida con éxito al bucket de fallback 'productos'!");
             return;
           }
@@ -355,7 +391,12 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
 
       // Obtener URL pública de 'imagenes'
       const { data } = supabase.storage.from('imagenes').getPublicUrl(filePath);
-      setImagenGenerica(data.publicUrl);
+      const publicUrl = data.publicUrl;
+      if (pestanaActiva === "productos") {
+        setImagenesList(prev => [...prev, publicUrl]);
+      } else {
+        setImagenGenerica(publicUrl);
+      }
       alert("¡Imagen subida con éxito!");
     } catch (err) {
       alert("Error al subir archivo: " + err.message);
@@ -504,46 +545,6 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
                 </>
               )}
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600 uppercase block mb-1">Imagen del Item</label>
-                <div className="flex flex-col gap-2">
-                  {/* File Selector */}
-                  <div className="relative border border-dashed border-rose-200/60 rounded-2xl p-4 bg-white/50 flex flex-col items-center justify-center cursor-pointer hover:bg-white/80 transition-colors">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileChange} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      disabled={subiendoImagen}
-                    />
-                    <span className="text-xs text-neutral-500 font-bold text-center">
-                      {subiendoImagen ? "⏳ Subiendo archivo..." : "📁 Subir desde dispositivo"}
-                    </span>
-                  </div>
-                  
-                  {/* Fallback Text Input */}
-                  <input 
-                    type="text" 
-                    placeholder="O pega una URL de imagen..." 
-                    value={imagenGenerica} 
-                    onChange={(e) => setImagenGenerica(e.target.value)} 
-                    className="w-full border p-3 rounded-xl focus:outline-pink-400 text-xs text-black bg-white/80" 
-                  />
-                </div>
-                {imagenGenerica && (
-                  <div className="mt-2 relative w-16 h-16 rounded-xl overflow-hidden border border-rose-100 bg-white/80 flex items-center justify-center">
-                    <img src={imagenGenerica} alt="Vista previa" className="w-full h-full object-cover" />
-                    <button 
-                      type="button" 
-                      onClick={() => setImagenGenerica("")}
-                      className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 rounded-bl hover:bg-red-600 text-[9px] flex items-center justify-center font-bold"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {pestanaActiva === "productos" && (
                 <>
                   <div className="space-y-1">
@@ -558,7 +559,213 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
                     <label className="text-xs font-bold text-gray-600 uppercase">Hashtags / Etiquetas</label>
                     <input type="text" placeholder="Ej: #cajas #hotwheels #amor" value={tags} onChange={(e) => setTags(e.target.value)} className="w-full border p-3 rounded-xl focus:outline-pink-400 text-sm text-black bg-white" />
                   </div>
+
+                  {/* Gestor de Specs (Lo que incluye el detalle) */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-600 uppercase block mb-1">¿Qué incluye el detalle? ({specsList.length})</label>
+                    {specsList.length > 0 && (
+                      <div className="space-y-1.5 p-2 bg-gray-50 rounded-2xl border border-gray-100 max-h-[140px] overflow-y-auto">
+                        {specsList.map((spec, index) => (
+                          <div key={index} className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-rose-100/50 shadow-xs">
+                            <span className="text-xs text-neutral-700 font-medium select-none">{spec}</span>
+                            <button 
+                              type="button" 
+                              onClick={() => eliminarSpec(index)}
+                              className="text-red-500 hover:text-red-700 font-bold text-xs px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Oso de felpa mini, Globo HBD..." 
+                        value={specNueva} 
+                        onChange={(e) => setSpecNueva(e.target.value)} 
+                        className="flex-1 border p-2.5 rounded-xl focus:outline-pink-400 text-xs text-black bg-white/80" 
+                      />
+                      <button 
+                        type="button" 
+                        onClick={agregarSpec} 
+                        className="bg-neutral-900 hover:bg-neutral-800 text-white px-4 rounded-xl text-xs font-bold transition-colors"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Configuración de Precios por Variante (Ramos y Cuadros) */}
+                  <div className="space-y-3 border-t border-gray-100 pt-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-600 uppercase block mb-1">Tipo de Opciones / Variantes</label>
+                      <select 
+                        value={tipoVariante} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTipoVariante(val);
+                          if (val !== "ninguno") {
+                            const basePrice = precioGenerico || 0;
+                            const newPrices = {};
+                            const keys = val === "ramo" 
+                              ? ["Rojo", "Rosado", "Azul", "Morado", "Amarillo", "Blanco"]
+                              : ["10x15", "13x18", "15x20", "20x30"];
+                            keys.forEach(k => {
+                              newPrices[k] = basePrice;
+                            });
+                            setPreciosVariantes(newPrices);
+                          } else {
+                            setPreciosVariantes({});
+                          }
+                        }}
+                        className="w-full border p-3 rounded-xl focus:outline-pink-400 text-sm bg-white font-bold text-neutral-700"
+                      >
+                        <option value="ninguno">Ninguno (Precio Fijo)</option>
+                        <option value="ramo">Ramo (Precio por Color)</option>
+                        <option value="cuadro">Retrato/Cuadro (Precio por Tamaño)</option>
+                      </select>
+                    </div>
+
+                    {tipoVariante === "ramo" && (
+                      <div className="space-y-2 bg-[#FFFDF5]/40 p-3 rounded-2xl border border-rose-100/10">
+                        <span className="text-[10px] uppercase font-black text-rose-500 block">Precios por Color ($):</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {["Rojo", "Rosado", "Azul", "Morado", "Amarillo", "Blanco"].map((color) => (
+                            <div key={color} className="space-y-0.5">
+                              <label className="text-[10px] font-bold text-gray-500">{color}</label>
+                              <input 
+                                type="number" 
+                                placeholder="Ej: 25000" 
+                                value={preciosVariantes[color] || ""} 
+                                onChange={(e) => setPreciosVariantes(prev => ({ ...prev, [color]: e.target.value }))}
+                                className="w-full border p-2 rounded-xl focus:outline-pink-400 text-xs text-black bg-white" 
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {tipoVariante === "cuadro" && (
+                      <div className="space-y-2 bg-[#FFFDF5]/40 p-3 rounded-2xl border border-rose-100/10">
+                        <span className="text-[10px] uppercase font-black text-rose-500 block">Precios por Tamaño ($):</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {["10x15", "13x18", "15x20", "20x30"].map((size) => (
+                            <div key={size} className="space-y-0.5">
+                              <label className="text-[10px] font-bold text-gray-500">{size}</label>
+                              <input 
+                                type="number" 
+                                placeholder="Ej: 15000" 
+                                value={preciosVariantes[size] || ""} 
+                                onChange={(e) => setPreciosVariantes(prev => ({ ...prev, [size]: e.target.value }))}
+                                className="w-full border p-2 rounded-xl focus:outline-pink-400 text-xs text-black bg-white" 
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Gestor de Múltiples Imágenes para Productos */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-600 uppercase block mb-1">Imágenes del Producto ({imagenesList.length})</label>
+                    {imagenesList.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 p-2 bg-gray-50 rounded-2xl border border-gray-100 max-h-[160px] overflow-y-auto">
+                        {imagenesList.map((imgUrl, index) => (
+                          <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-rose-100 bg-white shadow-xs group">
+                            <img src={imgUrl} alt={`Previa ${index}`} className="w-full h-full object-cover" />
+                            <button 
+                              type="button" 
+                              onClick={() => setImagenesList(prev => prev.filter((_, i) => i !== index))}
+                              className="absolute top-0.5 right-0.5 bg-red-500 hover:bg-red-600 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold text-[9px] shadow"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-2">
+                      {/* File Selector */}
+                      <div className="relative border border-dashed border-rose-200/60 rounded-xl p-3 bg-white/50 flex flex-col items-center justify-center cursor-pointer hover:bg-white/80 transition-colors">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleFileChange} 
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          disabled={subiendoImagen}
+                        />
+                        <span className="text-xs text-neutral-500 font-bold text-center">
+                          {subiendoImagen ? "⏳ Subiendo archivo..." : "📁 Subir desde dispositivo"}
+                        </span>
+                      </div>
+                      
+                      {/* Fallback Text Input */}
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Pega una URL de imagen..." 
+                          value={urlNueva} 
+                          onChange={(e) => setUrlNueva(e.target.value)} 
+                          className="flex-1 border p-2.5 rounded-xl focus:outline-pink-400 text-xs text-black bg-white/80" 
+                        />
+                        <button 
+                          type="button" 
+                          onClick={agregarUrlImagen} 
+                          className="bg-neutral-900 hover:bg-neutral-800 text-white px-3 rounded-xl text-xs font-bold transition-colors"
+                        >
+                          Añadir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </>
+              )}
+
+              {pestanaActiva === "plantillas" && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600 uppercase block mb-1">Imagen de la Plantilla</label>
+                  <div className="flex flex-col gap-2">
+                    {/* File Selector */}
+                    <div className="relative border border-dashed border-rose-200/60 rounded-xl p-3 bg-white/50 flex flex-col items-center justify-center cursor-pointer hover:bg-white/80 transition-colors">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleFileChange} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        disabled={subiendoImagen}
+                      />
+                      <span className="text-xs text-neutral-500 font-bold text-center">
+                        {subiendoImagen ? "⏳ Subiendo archivo..." : "📁 Subir desde dispositivo"}
+                      </span>
+                    </div>
+                    
+                    {/* Fallback Text Input */}
+                    <input 
+                      type="text" 
+                      placeholder="O pega una URL de imagen..." 
+                      value={imagenGenerica} 
+                      onChange={(e) => setImagenGenerica(e.target.value)} 
+                      className="w-full border p-3 rounded-xl focus:outline-pink-400 text-xs text-black bg-white/80" 
+                    />
+                  </div>
+                  {imagenGenerica && (
+                    <div className="mt-2 relative w-16 h-16 rounded-xl overflow-hidden border border-rose-100 bg-white/80 flex items-center justify-center">
+                      <img src={imagenGenerica} alt="Vista previa" className="w-full h-full object-cover" />
+                      <button 
+                        type="button" 
+                        onClick={() => setImagenGenerica("")}
+                        className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 rounded-bl hover:bg-red-600 text-[9px] flex items-center justify-center font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="pt-2 flex flex-col gap-2">
@@ -582,23 +789,18 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
                   key={`${pestanaActiva}-item-${item.id}`} 
                   className={`p-4 border rounded-xl flex flex-col justify-between transition-all ${
                     pestanaActiva === 'plantillas' ? 'bg-purple-50/10 border-purple-100' : 'bg-white border-gray-100'
-                  } ${!item.existeEnBD ? 'opacity-70 border-dashed border-pink-200 bg-pink-50/5' : ''}`}
+                  }`}
                 >
                   <div className="space-y-3">
                     <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-50 border relative">
                       <img 
-                        src={(pestanaActiva === 'productos' ? item.imagen : item.image) || "https://placehold.co/400x300?text=Crave+Details"} 
+                        src={(pestanaActiva === 'productos' ? (item.imagenesList && item.imagenesList[0] || item.imagen) : item.image) || "https://placehold.co/400x300?text=Crave+Details"} 
                         alt="" 
                         className="w-full h-full object-cover" 
                       />
                       {pestanaActiva === 'plantillas' && (
                         <span className="absolute top-2 right-2 text-[9px] font-bold bg-purple-600 text-white px-2 py-0.5 rounded shadow">
                           💪 {item.difficulty}
-                        </span>
-                      )}
-                      {!item.existeEnBD && (
-                        <span className="absolute top-2 left-2 text-[8px] font-black uppercase bg-pink-100 text-pink-700 px-2 py-0.5 rounded shadow-sm">
-                          Fijo en Página 📌
                         </span>
                       )}
                     </div>
@@ -632,11 +834,7 @@ export default function AdminPanel({ setEsAdminView, onProductoCambiado, PRODUCT
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-4 pt-2 border-t border-gray-50">
                     <button type="button" onClick={() => activarEdicion(item)} className="bg-amber-400 text-white py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500">Editar</button>
-                    {item.existeEnBD ? (
-                      <button type="button" onClick={() => handleEliminar(item.id)} className="bg-rose-50 text-rose-600 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-100">Borrar</button>
-                    ) : (
-                      <span className="text-[10px] text-neutral-400 font-bold self-center text-center">No Borrable</span>
-                    )}
+                    <button type="button" onClick={() => handleEliminar(item.id)} className="bg-rose-50 text-rose-600 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-100">Borrar</button>
                   </div>
                 </div>
               ))}

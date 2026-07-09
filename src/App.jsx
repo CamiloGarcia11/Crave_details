@@ -25,7 +25,23 @@ export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartAnimating, setCartAnimating] = useState(false); 
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedColor, setSelectedColor] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
+  const [selectedPhotoType, setSelectedPhotoType] = useState(null);
   const [activeTabImage, setActiveTabImage] = useState("");
+
+  const [catalogColores, setCatalogColores] = useState({});
+  const [catalogTamaños, setCatalogTamaños] = useState({});
+  const [catalogFotos, setCatalogFotos] = useState({});
+
+  useEffect(() => {
+    setSelectedColor(null);
+    setSelectedSize(null);
+    setSelectedPhotoType(null);
+    if (selectedProduct && selectedProduct.images && selectedProduct.images.length > 0) {
+      setActiveTabImage(selectedProduct.images[0]);
+    }
+  }, [selectedProduct]);
   const [seccionActual, setSeccionActual] = useState('catalogo');
   const [seccionVisual, setSeccionVisual] = useState('catalogo'); 
   const [isChangingTab, setIsChangingTab] = useState(false);
@@ -95,63 +111,68 @@ export default function App() {
     cambiarPestana('catalogo');
   };
 
-  // Unifica PRODUCTOS_MOCK con lo editado o agregado en Supabase (Memoizado para mayor fluidez)
+  // Carga los productos directamente de la base de datos (con soporte para múltiples imágenes, specs y precios por variante)
   const productosCombinados = useMemo(() => {
-    const finalProductos = [];
-    const mergedDbIds = new Set();
-    const mergedDbNombres = new Set();
+    return productos.map((dbItem) => {
+      const imageList = dbItem.imagen ? dbItem.imagen.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      const primaryImage = imageList[0] || dbItem.imagen || "https://placehold.co/400x300?text=Crave+Details";
+      const allImages = imageList.length > 0 ? imageList : [primaryImage];
 
-    // Primero procesamos los mocks, sobreescribiéndolos con su versión de la base de datos si existe
-    PRODUCTOS_MOCK.forEach((mockItem) => {
-      const dbMatch = productos.find(
-        (p) => (p.id === mockItem.id) || (p.nombre === mockItem.name || p.name === mockItem.name)
-      );
-      if (dbMatch) {
-        mergedDbIds.add(dbMatch.id);
-        if (dbMatch.nombre) mergedDbNombres.add(dbMatch.nombre.trim().toLowerCase());
-        if (dbMatch.name) mergedDbNombres.add(dbMatch.name.trim().toLowerCase());
+      const descRaw = dbItem.descripcion || dbItem.description || "";
+      let parsedDesc = descRaw;
+      let parsedSpecs = ["Detalle hecho a mano", "Diseño personalizado"];
+      
+      let variantType = "ninguno";
+      let variantPrices = {};
 
-        finalProductos.push({
-          ...mockItem,
-          id: dbMatch.id, // ID de Supabase
-          name: dbMatch.nombre || dbMatch.name || mockItem.name,
-          price: dbMatch.precio !== undefined ? dbMatch.precio : (dbMatch.price !== undefined ? dbMatch.price : mockItem.price),
-          image: dbMatch.imagen || dbMatch.image || mockItem.image,
-          category: dbMatch.categoria || dbMatch.category || mockItem.category,
-          // Mantenemos o sobreescribimos la descripción, tags y specs si están en DB
-          description: dbMatch.descripcion || dbMatch.description || mockItem.description,
-          tags: dbMatch.formatos || dbMatch.tags || mockItem.tags || "",
-          specs: dbMatch.specs || mockItem.specs,
-          images: dbMatch.images || [dbMatch.imagen || dbMatch.image || mockItem.image]
+      // Primero separamos por precios de variantes si existen
+      let mainPart = descRaw;
+      if (descRaw.includes("|||prices:")) {
+        const partsForPrices = descRaw.split("|||prices:");
+        mainPart = partsForPrices[0];
+        const pricesStr = partsForPrices[1] || "";
+        
+        // Parsear precios
+        const pairs = pricesStr.split(',').map(s => s.trim()).filter(Boolean);
+        pairs.forEach(pair => {
+          const [k, v] = pair.split('=');
+          if (k && v) {
+            if (k === "tipo") {
+              variantType = v;
+            } else {
+              variantPrices[k] = parseFloat(v) || 0;
+            }
+          }
         });
+      }
+
+      // Luego separamos por specs de la parte principal
+      if (mainPart.includes("|||")) {
+        const parts = mainPart.split("|||");
+        parsedDesc = parts[0].trim();
+        const specsStr = parts[1] || "";
+        parsedSpecs = specsStr.split(',').map(s => s.trim()).filter(Boolean);
       } else {
-        finalProductos.push(mockItem);
+        parsedDesc = mainPart.trim();
+        if (dbItem.specs) {
+          parsedSpecs = dbItem.specs;
+        }
       }
+
+      return {
+        id: dbItem.id,
+        name: dbItem.nombre || dbItem.name || "Detalle Sin Nombre",
+        price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
+        image: primaryImage,
+        category: dbItem.categoria || dbItem.category || "Otros",
+        tags: dbItem.formatos || dbItem.tags || "#nuevo",
+        description: parsedDesc || "Detalle premium en nuestro catálogo.",
+        specs: parsedSpecs,
+        images: allImages,
+        variantType,
+        variantPrices
+      };
     });
-
-    // Luego añadimos los productos de la base de datos que son totalmente nuevos
-    productos.forEach((dbItem) => {
-      const dbId = dbItem.id;
-      const dbNombre = (dbItem.nombre || dbItem.name || "").trim().toLowerCase();
-
-      const yaProcesado = mergedDbIds.has(dbId) || mergedDbNombres.has(dbNombre);
-
-      if (!yaProcesado) {
-        finalProductos.push({
-          id: dbItem.id,
-          name: dbItem.nombre || dbItem.name,
-          price: dbItem.precio !== undefined ? dbItem.precio : (dbItem.price !== undefined ? dbItem.price : 0),
-          image: dbItem.imagen || dbItem.image || "https://placehold.co/400x300?text=Crave+Details",
-          category: dbItem.categoria || dbItem.category || "Otros",
-          tags: dbItem.formatos || dbItem.tags || "#nuevo",
-          description: dbItem.descripcion || dbItem.description || "Nuevo detalle premium en nuestro catálogo.",
-          specs: dbItem.specs || ["Detalle hecho a mano", "Diseño personalizado"],
-          images: dbItem.images || [dbItem.imagen || dbItem.image || "https://placehold.co/400x300?text=Crave+Details"]
-        });
-      }
-    });
-
-    return finalProductos;
   }, [productos]);
 
 
@@ -198,29 +219,72 @@ export default function App() {
     setCartOpen(false);
   };
 
-  const addToCart = (producto) => {
+  const addToCart = (producto, options = null) => {
+    const esRamo = (producto.category === "Ramos Decorados" || (producto.name && producto.name.toLowerCase().includes("ramo")));
+    const esPortaretrato = (producto.category && (producto.category.toLowerCase().includes("portaretrato") || producto.category.toLowerCase().includes("cuadro") || producto.category.toLowerCase().includes("calendario"))) || (producto.name && (producto.name.toLowerCase().includes("portaretrato") || producto.name.toLowerCase().includes("calendario") || producto.name.toLowerCase().includes("cuadro")));
+
+    let color = null;
+    let size = null;
+    let photoType = null;
+
+    if (options) {
+      color = options.color;
+      size = options.size;
+      photoType = options.photoType;
+    } else {
+      color = selectedColor;
+      size = selectedSize;
+      photoType = selectedPhotoType;
+    }
+
+    if (esRamo && !color) {
+      color = "Rojo"; // default fallback
+    }
+    if (esPortaretrato) {
+      if (!size) size = "15x20"; // default fallback
+      if (!photoType) photoType = "Con foto a color"; // default fallback
+    }
+
+    const cartKey = `${producto.id}-${color || ''}-${size || ''}-${photoType || ''}`;
+
     setCart((prevCart) => {
-      const existe = prevCart.find((item) => item.id === producto.id);
+      const existe = prevCart.find((item) => item.cartKey === cartKey);
       if (existe) {
         return prevCart.map((item) =>
-          item.id === producto.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prevCart, { ...producto, quantity: 1 }];
+      // Calcular el precio de la variante elegida
+      let finalPrice = producto.price;
+      if (esRamo && color && producto.variantPrices && producto.variantPrices[color]) {
+        finalPrice = producto.variantPrices[color];
+      } else if (esPortaretrato && size && producto.variantPrices && producto.variantPrices[size]) {
+        finalPrice = producto.variantPrices[size];
+      }
+
+      return [...prevCart, { 
+        ...producto, 
+        cartKey,
+        quantity: 1, 
+        price: finalPrice,
+        selectedColor: color, 
+        selectedSize: size, 
+        selectedPhotoType: photoType 
+      }];
     });
     openCart();
   };
 
-  const removeFromCart = (id) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== id));
+  const removeFromCart = (cartKey) => {
+    setCart((prevCart) => prevCart.filter((item) => item.cartKey !== cartKey));
   };
 
-  const updateCartQuantity = (id, newQty) => {
+  const updateCartQuantity = (cartKey, newQty) => {
     if (newQty <= 0) {
-      removeFromCart(id);
+      removeFromCart(cartKey);
     } else {
       setCart((prevCart) =>
-        prevCart.map((item) => (item.id === id ? { ...item, quantity: newQty } : item))
+        prevCart.map((item) => (item.cartKey === cartKey ? { ...item, quantity: newQty } : item))
       );
     }
   };
@@ -229,7 +293,13 @@ export default function App() {
   const getCartCount = () => cart.reduce((count, item) => count + item.quantity, 0);
 
   const handleCheckout = () => {
-    const listaRegalos = cart.map(item => `• ${item.name} (Cant: ${item.quantity}) -> $${(item.price * item.quantity).toLocaleString('es-CO')}`).join('\n');
+    const listaRegalos = cart.map(item => {
+      let variantInfo = "";
+      if (item.selectedColor) variantInfo += ` [Color: ${item.selectedColor}]`;
+      if (item.selectedSize) variantInfo += ` [Tamaño: ${item.selectedSize}]`;
+      if (item.selectedPhotoType) variantInfo += ` [Foto: ${item.selectedPhotoType}]`;
+      return `• ${item.name}${variantInfo} (Cant: ${item.quantity}) -> $${(item.price * item.quantity).toLocaleString('es-CO')}`;
+    }).join('\n');
     const mensaje = encodeURIComponent(
       `¡Hola Crave Details! 🌸\n\nMe gustaría encargar el siguiente pedido para Cúcuta:\n\n${listaRegalos}\n\n• *Total Estimado:* $${getCartTotal().toLocaleString('es-CO')}`
     );
@@ -635,42 +705,161 @@ export default function App() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <AnimatePresence mode="popLayout">
-              {productosFiltrados.map((producto) => (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  whileHover={{ y: -6, transition: { duration: 0.15 } }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  key={producto.id} 
-                  className="bg-white/70 backdrop-blur-sm rounded-[32px] overflow-hidden border border-white/60 shadow-[0_8px_30px_rgba(231,27,79,0.02)] flex flex-col justify-between p-3 group hover:shadow-[0_20px_50px_rgba(231,27,79,0.06)] hover:bg-white/85 transition-all duration-300"
-                >
-                  <div className="cursor-pointer" onClick={() => verEspecificaciones(producto)}>
-                    <div className="h-[240px] rounded-2xl overflow-hidden bg-neutral-50 mb-4 relative">
-                      <span className="absolute top-2 left-2 bg-white/90 backdrop-blur-xs font-funny text-[10px] font-bold px-2 py-0.5 rounded-lg text-[#9E1B41]">
-                        {producto.category}
-                      </span>
-                      <img src={producto.image} alt={producto.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                    </div>
-                    <div className="px-1">
-                      <h3 className="text-base font-bold text-neutral-900 mb-0.5 tracking-tight group-hover:text-[#E71B4F] transition-colors">{producto.name}</h3>
-                      <span className="text-[12px] text-gray-400 font-funny block mb-3">{producto.tags}</span>
-                    </div>
-                  </div>
+              {productosFiltrados.map((producto) => {
+                const esRamo = (producto.category === "Ramos Decorados" || (producto.name && producto.name.toLowerCase().includes("ramo")));
+                const esPortaretrato = (producto.category && (producto.category.toLowerCase().includes("portaretrato") || producto.category.toLowerCase().includes("cuadro") || producto.category.toLowerCase().includes("calendario"))) || (producto.name && (producto.name.toLowerCase().includes("portaretrato") || producto.name.toLowerCase().includes("calendario") || producto.name.toLowerCase().includes("cuadro")));
 
-                  <div className="px-1 pb-1 flex items-center justify-between">
-                    <span className="text-lg font-funny font-bold text-neutral-900">${producto.price.toLocaleString('es-CO')}</span>
-                    <motion.button 
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => addToCart(producto)} 
-                      className="bg-[#E71B4F] text-white p-2.5 rounded-xl hover:bg-[#d01443] transition-all"
-                    >
-                      <Heart size={16} fill="white" />
-                    </motion.button>
-                  </div>
-                </motion.div>
-              ))}
+                return (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    whileHover={{ y: -6, transition: { duration: 0.15 } }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    key={producto.id} 
+                    className="bg-white/70 backdrop-blur-sm rounded-[32px] overflow-hidden border border-white/60 shadow-[0_8px_30px_rgba(231,27,79,0.02)] flex flex-col justify-between p-3 group hover:shadow-[0_20px_50px_rgba(231,27,79,0.06)] hover:bg-white/85 transition-all duration-300"
+                  >
+                    <div className="cursor-pointer" onClick={() => verEspecificaciones(producto)}>
+                      <div className="h-[240px] rounded-2xl overflow-hidden bg-neutral-50 mb-4 relative">
+                        <span className="absolute top-2 left-2 bg-white/90 backdrop-blur-xs font-funny text-[10px] font-bold px-2 py-0.5 rounded-lg text-[#9E1B41]">
+                          {producto.category}
+                        </span>
+                        <img src={producto.image} alt={producto.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      </div>
+                      <div className="px-1">
+                        <h3 className="text-base font-bold text-neutral-900 mb-0.5 tracking-tight group-hover:text-[#E71B4F] transition-colors">{producto.name}</h3>
+                        <span className="text-[12px] text-gray-400 font-funny block mb-2">{producto.tags}</span>
+
+                        {/* Opciones compactas directamente en la tarjeta de inicio */}
+                        {esRamo && (
+                          <div className="mb-3 space-y-1 bg-[#FFFDF5]/40 p-2 rounded-xl border border-[#E71B4F]/5">
+                            <span className="text-[9px] uppercase font-black text-neutral-400 block">Color de Ramo:</span>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[
+                                { name: "Rojo", hex: "#EF4444" },
+                                { name: "Rosado", hex: "#EC4899" },
+                                { name: "Azul", hex: "#3B82F6" },
+                                { name: "Morado", hex: "#A855F7" },
+                                { name: "Amarillo", hex: "#EAB308" },
+                                { name: "Blanco", hex: "#F9FAFB" }
+                              ].map((col) => {
+                                const activeColor = catalogColores[producto.id] || "Rojo";
+                                return (
+                                  <button
+                                    key={col.name}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCatalogColores(prev => ({ ...prev, [producto.id]: col.name }));
+                                    }}
+                                    className={`w-4.5 h-4.5 rounded-full border transition-all flex items-center justify-center ${
+                                      activeColor === col.name ? "border-[#E71B4F] scale-110 shadow-xs" : "border-neutral-200 hover:scale-105"
+                                    }`}
+                                    style={{ backgroundColor: col.hex }}
+                                    title={col.name}
+                                  >
+                                    {activeColor === col.name && (
+                                      <span className={`text-[6px] font-black ${col.name === "Blanco" ? "text-neutral-900" : "text-white"}`}>✓</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {esPortaretrato && (
+                          <div className="mb-3 space-y-2 bg-[#FFFDF5]/40 p-2 rounded-xl border border-[#E71B4F]/5">
+                            <div>
+                              <span className="text-[9px] uppercase font-black text-neutral-400 block mb-0.5">Medida:</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {["10x15", "13x18", "15x20", "20x30"].map((size) => {
+                                  const activeSize = catalogTamaños[producto.id] || "15x20";
+                                  return (
+                                    <button
+                                      key={size}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCatalogTamaños(prev => ({ ...prev, [producto.id]: size }));
+                                      }}
+                                      className={`px-1.5 py-0.5 rounded-md text-[8px] font-black transition-all border ${
+                                        activeSize === size 
+                                          ? "bg-[#E71B4F] text-white border-transparent" 
+                                          : "bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50"
+                                      }`}
+                                    >
+                                      {size}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="text-[9px] uppercase font-black text-neutral-400 block mb-0.5">Fotografía:</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {[
+                                  { val: "Con foto a color", label: "Color" },
+                                  { val: "Con foto blanco y negro", label: "B/N" },
+                                  { val: "Sin foto (solo portaretrato)", label: "Sin Foto" }
+                                ].map((opt) => {
+                                  const activePhoto = catalogFotos[producto.id] || "Con foto a color";
+                                  return (
+                                    <button
+                                      key={opt.val}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCatalogFotos(prev => ({ ...prev, [producto.id]: opt.val }));
+                                      }}
+                                      className={`px-1.5 py-0.5 rounded-md text-[8px] font-black transition-all border ${
+                                        activePhoto === opt.val 
+                                          ? "bg-[#E71B4F] text-white border-transparent" 
+                                          : "bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50"
+                                      }`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="px-1 pb-1 flex items-center justify-between">
+                      <span className="text-lg font-funny font-bold text-neutral-900">
+                        ${(() => {
+                          const color = catalogColores[producto.id] || "Rojo";
+                          const size = catalogTamaños[producto.id] || "15x20";
+                          let price = producto.price;
+                          if (esRamo && producto.variantPrices && producto.variantPrices[color]) {
+                            price = producto.variantPrices[color];
+                          } else if (esPortaretrato && producto.variantPrices && producto.variantPrices[size]) {
+                            price = producto.variantPrices[size];
+                          }
+                          return price.toLocaleString('es-CO');
+                        })()}
+                      </span>
+                      <motion.button 
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => addToCart(producto, {
+                          color: catalogColores[producto.id] || (esRamo ? "Rojo" : null),
+                          size: catalogTamaños[producto.id] || (esPortaretrato ? "15x20" : null),
+                          photoType: catalogFotos[producto.id] || (esPortaretrato ? "Con foto a color" : null)
+                        })} 
+                        className="bg-[#E71B4F] text-white p-2.5 rounded-xl hover:bg-[#d01443] transition-all"
+                      >
+                        <ShoppingBag size={16} />
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         </main>
@@ -714,7 +903,20 @@ export default function App() {
                     <div>
                       <span className="text-[12px] bg-rose-50 text-[#E71B4F] font-funny font-bold px-3 py-1 rounded-full uppercase mb-3 inline-block">Sección: {selectedProduct.category}</span>
                       <h2 className="text-3xl font-black text-neutral-950 mb-2" style={{ fontFamily: 'Playfair Display, serif' }}>{selectedProduct.name}</h2>
-                      <div className="text-2xl font-funny font-bold text-[#E71B4F] mb-6">${selectedProduct.price.toLocaleString('es-CO')} COP</div>
+                      <div className="text-2xl font-funny font-bold text-[#E71B4F] mb-6">
+                        ${(() => {
+                          const esRamo = (selectedProduct.category === "Ramos Decorados" || (selectedProduct.name && selectedProduct.name.toLowerCase().includes("ramo")));
+                          const esPortaretrato = (selectedProduct.category && (selectedProduct.category.toLowerCase().includes("portaretrato") || selectedProduct.category.toLowerCase().includes("cuadro") || selectedProduct.category.toLowerCase().includes("calendario"))) || (selectedProduct.name && (selectedProduct.name.toLowerCase().includes("portaretrato") || selectedProduct.name.toLowerCase().includes("calendario") || selectedProduct.name.toLowerCase().includes("cuadro")));
+
+                          let price = selectedProduct.price;
+                          if (esRamo && selectedColor && selectedProduct.variantPrices && selectedProduct.variantPrices[selectedColor]) {
+                            price = selectedProduct.variantPrices[selectedColor];
+                          } else if (esPortaretrato && selectedSize && selectedProduct.variantPrices && selectedProduct.variantPrices[selectedSize]) {
+                            price = selectedProduct.variantPrices[selectedSize];
+                          }
+                          return price.toLocaleString('es-CO');
+                        })()} COP
+                      </div>
                       <div className="border-t border-gray-100 pt-4 mb-6">
                         <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Descripción:</h4>
                         <p className="text-sm text-neutral-600 leading-relaxed font-medium">{selectedProduct.description}</p>
@@ -730,6 +932,87 @@ export default function App() {
                           ))}
                         </ul>
                       </div>
+
+                      {/* SELECTOR DE COLOR (Para Ramos) */}
+                      {(selectedProduct.category === "Ramos Decorados" || (selectedProduct.name && selectedProduct.name.toLowerCase().includes("ramo"))) && (
+                        <div className="mb-6 border-t border-gray-100 pt-4">
+                          <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Selecciona un color:</h4>
+                          <div className="flex gap-2.5 flex-wrap">
+                            {[
+                              { name: "Rojo", hex: "#EF4444" },
+                              { name: "Rosado", hex: "#EC4899" },
+                              { name: "Azul", hex: "#3B82F6" },
+                              { name: "Morado", hex: "#A855F7" },
+                              { name: "Amarillo", hex: "#EAB308" },
+                              { name: "Blanco", hex: "#F9FAFB", border: true }
+                            ].map((col) => (
+                              <button
+                                key={col.name}
+                                type="button"
+                                onClick={() => setSelectedColor(col.name)}
+                                className={`w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                                  selectedColor === col.name ? "border-[#E71B4F] scale-110 shadow-md" : "border-neutral-200 hover:scale-105"
+                                }`}
+                                style={{ backgroundColor: col.hex }}
+                                title={col.name}
+                              >
+                                {selectedColor === col.name && (
+                                  <span className={`text-[10px] font-black ${col.name === "Blanco" ? "text-neutral-900" : "text-white"}`}>✓</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                          {selectedColor && (
+                            <p className="text-xs font-bold text-[#E71B4F] mt-2">Color elegido: {selectedColor}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SELECTOR DE TAMAÑO & TIPO (Para Portaretratos / Cuadros / Calendarios) */}
+                      {((selectedProduct.category && (selectedProduct.category.toLowerCase().includes("portaretrato") || selectedProduct.category.toLowerCase().includes("cuadro") || selectedProduct.category.toLowerCase().includes("calendario"))) || 
+                       (selectedProduct.name && (selectedProduct.name.toLowerCase().includes("portaretrato") || selectedProduct.name.toLowerCase().includes("calendario") || selectedProduct.name.toLowerCase().includes("cuadro")))) && (
+                        <div className="mb-6 border-t border-gray-100 pt-4 space-y-4">
+                          <div>
+                            <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Selecciona un tamaño:</h4>
+                            <div className="flex gap-2 flex-wrap">
+                              {["10x15", "13x18", "15x20", "20x30"].map((size) => (
+                                <button
+                                  key={size}
+                                  type="button"
+                                  onClick={() => setSelectedSize(size)}
+                                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                    selectedSize === size 
+                                      ? "bg-[#E71B4F] text-white border-[#E71B4F] shadow-sm font-black" 
+                                      : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50"
+                                  }`}
+                                >
+                                  {size}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Tipo de Foto:</h4>
+                            <div className="flex gap-2 flex-wrap">
+                              {["Con foto a color", "Con foto blanco y negro", "Sin foto (solo portaretrato)"].map((photoType) => (
+                                <button
+                                  key={photoType}
+                                  type="button"
+                                  onClick={() => setSelectedPhotoType(photoType)}
+                                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                    selectedPhotoType === photoType 
+                                      ? "bg-[#E71B4F] text-white border-[#E71B4F] shadow-sm font-black" 
+                                      : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50"
+                                  }`}
+                                >
+                                  {photoType}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <motion.button 
                       whileHover={{ scale: 1.02 }}
@@ -931,7 +1214,7 @@ export default function App() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ type: "spring", stiffness: 300, damping: 28 }}
-                          key={item.id} 
+                          key={item.cartKey || item.id} 
                           className="flex items-center justify-between p-3 rounded-2xl bg-white/40 border border-white/40 shadow-xs hover:bg-white/60 hover:shadow-sm transition-all gap-3 group"
                         >
                           <div className="flex items-center gap-3">
@@ -944,11 +1227,20 @@ export default function App() {
                                 ${(item.price).toLocaleString('es-CO')} c/u
                               </span>
                               
+                              {/* Opciones seleccionadas */}
+                              {(item.selectedColor || item.selectedSize || item.selectedPhotoType) && (
+                                <div className="text-[9px] text-neutral-500 space-y-0.5 mt-1 bg-white/60 p-1.5 rounded-lg border border-rose-100/20 w-fit font-medium">
+                                  {item.selectedColor && <div className="flex items-center gap-1">🎨 Color: <span className="font-bold text-neutral-700">{item.selectedColor}</span></div>}
+                                  {item.selectedSize && <div className="flex items-center gap-1">📐 Tamaño: <span className="font-bold text-neutral-700">{item.selectedSize}</span></div>}
+                                  {item.selectedPhotoType && <div className="flex items-center gap-1">📸 Foto: <span className="font-bold text-neutral-700">{item.selectedPhotoType}</span></div>}
+                                </div>
+                              )}
+                              
                               {/* Control de Cantidad */}
                               <div className="flex items-center gap-2 mt-1 bg-white/80 rounded-lg p-0.5 border border-rose-100/30 w-fit">
                                 <button 
                                   type="button"
-                                  onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
+                                  onClick={() => updateCartQuantity(item.cartKey || item.id, item.quantity - 1)}
                                   className="w-5 h-5 rounded-md bg-rose-50/50 hover:bg-rose-100 text-[#9E1B41] font-extrabold flex items-center justify-center text-xs transition-colors"
                                 >
                                   -
@@ -956,7 +1248,7 @@ export default function App() {
                                 <span className="text-xs font-funny font-bold text-neutral-700 min-w-4 text-center select-none">{item.quantity}</span>
                                 <button 
                                   type="button"
-                                  onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+                                  onClick={() => updateCartQuantity(item.cartKey || item.id, item.quantity + 1)}
                                   className="w-5 h-5 rounded-md bg-rose-50/50 hover:bg-[#E71B4F] hover:text-white text-neutral-700 font-extrabold flex items-center justify-center text-xs transition-colors"
                                 >
                                   +
@@ -969,7 +1261,7 @@ export default function App() {
                             <motion.button 
                               whileHover={{ scale: 1.15 }} 
                               whileTap={{ scale: 0.85 }} 
-                              onClick={() => removeFromCart(item.id)} 
+                              onClick={() => removeFromCart(item.cartKey || item.id)} 
                               className="text-neutral-400 hover:text-red-500 transition-colors p-1"
                             >
                               <Trash2 size={16} />
