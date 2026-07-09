@@ -79,7 +79,7 @@ export default function CustomOrder() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 bg-white rounded-2xl shadow-xl mt-4 border border-neutral-100">
+    <div className="max-w-2xl mx-auto px-6 py-8 bg-white/75 backdrop-blur-md rounded-[32px] shadow-xl mt-4 border border-white/60">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-extrabold text-neutral-950">🎁 Arma tu Detalle Ideal</h2>
         <p className="text-neutral-500 mt-2 text-sm">Selecciona lo que deseas incluir o cuéntanos tu idea desde cero.</p>

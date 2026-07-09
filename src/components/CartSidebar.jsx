@@ -16,7 +16,7 @@ export default function CartSidebar({ isOpen, onClose }) {
         <motion.div 
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
-          className="w-screen max-w-md bg-white shadow-2xl flex flex-col"
+          className="w-screen max-w-md bg-white/85 backdrop-blur-lg shadow-2xl flex flex-col border-l border-white/30"
         >
           <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-[#FFF9C4]/50">
             <h2 className="text-xl font-bold text-[#2D1B22] flex items-center gap-2">
@@ -50,7 +50,7 @@ export default function CartSidebar({ isOpen, onClose }) {
           </div>
 
           {cart.length > 0 && (
-            <div className="p-6 border-t border-gray-100 bg-gray-50 space-y-4">
+            <div className="p-6 border-t border-white/40 bg-gray-50/40 space-y-4">
               <div className="flex justify-between text-lg font-bold text-[#2D1B22]">
                 <span>Total estimado:</span>
                 <span className="text-[#FF0055] text-2xl font-black">${getCartTotal().toFixed(2)}</span>
